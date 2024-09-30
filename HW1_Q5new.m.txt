@@ -1,0 +1,215 @@
+%  Read in the images using the MATLAB function imread
+J1 = imread("C:\Users\Saumya Aryan\Documents\IITB\Third year\5th sem\CS 663(Digital image processing)\T1.jpg");
+J2 = imread("C:\Users\Saumya Aryan\Documents\IITB\Third year\5th sem\CS 663(Digital image processing)\T2.jpg");
+
+%casting the image to double
+J1 = double(J1)
+J2 = double(J2)
+
+% Rotate the second image by 28.5 degrees anti-clockwise
+theta = 28.5;
+J3 = imrotate(J2, theta, 'bilinear', 'crop'); % Rotate using bilinear interpolation 
+
+
+%  display
+figure;
+subplot(1, 3, 1), imshow(uint8(J1)), title('Image J1');
+subplot(1, 3, 2), imshow(uint8(J2)), title('Image J2');
+subplot(1, 3, 3), imshow(uint8(J3)), title('Rotated Image J3');
+
+theta_rng = -45:1:45;
+
+% checking all angles from -45 to 45 by 1 degree
+for i = 1:length(theta_rng)
+    theta = theta_range(i);
+    
+    % Rotate J3 by the current angle theta to get J4
+    J4 = imrotate(J3, theta, 'bilinear', 'crop');
+    
+    % to make J3 and J4 of same size
+    [J1_resized, J4_resized] = resize_images(J1, J4);
+    
+    % NCC calculation
+    num = sum(sum(J1_resized .* J4_resized));
+    denom = sqrt(sum(sum(J1_resized.^2)) * sum(sum(J4_resized.^2)));
+     if denom ~= 0
+        ncc_val(i) = num / denom;
+     else
+        ncc_val(i) = 0; % when denominator goes to zero
+     end
+
+    % JE calculation
+    jnt_hist = compute_joint_histogram(J1_resized, J4_resized, 10);
+    jnt_pmf = jnt_hist / sum(jnt_hist(:)); % Normalize to get PMF
+    jnt_pmf(jnt_pmf == 0) = 0.00001; % to avoid log(0)
+    je_val(i) = -sum(jnt_pmf(:) .* log2(jnt_pmf(:)));
+
+    % QMI calculations
+    pI1 = sum(jnt_pmf, 2); % Marginal histogram for J1
+    pI2 = sum(jnt_pmf, 1); % Marginal histogram for J4
+    qmi_val(i) = sum(sum((jnt_pmf - (pI1 * pI2)).^2));
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+% Plot separate graphs of the values of NCC, JE, QMI versus θ
+figure;
+subplot(3,1,1);
+plot(theta_rng, ncc_val, '-o');
+title('Normalized Cross-Correlation (NCC) vs. \theta');
+xlabel('\theta (degrees)');
+ylabel('NCC');
+grid on;
+
+subplot(3,1,2);
+plot(theta_rng, je_val, '-o');
+title('Joint Entropy (JE) vs. \theta');
+xlabel('\theta (degrees)');
+ylabel('JE');
+grid on;
+
+subplot(3,1,3);
+plot(theta_rng, qmi_val, '-o');
+title('Quadratic Mutual Information (QMI) vs. \theta');
+xlabel('\theta (degrees)');
+ylabel('QMI');
+grid on;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+% Finding the optimal angle
+[~, i_ncc_max] = max(ncc_val);
+opti_theta_ncc = theta_rng(i_ncc_max);
+
+[~, i_je_min] = min(je_val);
+opti_theta_je = theta_rng(i_je_min);
+
+[~, i_qmi_max] = max(qmi_val);
+opti_theta_qmi = theta_rng(i_qmi_max);
+
+% Display the optimal angles
+fprintf('Optimal rotation angle based on NCC: %.1f degrees\n', opti_theta_ncc);
+fprintf('Optimal rotation angle based on JE: %.1f degrees\n', opti_theta_je);
+fprintf('Optimal rotation angle based on QMI: %.1f degrees\n', opti_theta_qmi);
+
+
+
+
+
+
+
+
+%function to resize images to match dimensions
+
+
+function [J1_resized, J4_resized] = resize_images(J1, J4)
+    % Determine the size of the images
+    sz1 = size(J1);
+    sz4 = size(J4);
+    
+    % Find the new size for resizing
+    new_size = min(sz1(1:2), sz4(1:2));
+    
+    % Resize images to the same size
+    J1_resized = imresize(J1, new_size, 'bilinear');
+    J4_resized = imresize(J4, new_size, 'bilinear');
+end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+%  joint histogram routine
+
+function jnt_hist = compute_joint_histogram(I1, I2, bin_width)
+    % to check that the input images are of the same size
+    assert(all(size(I1) == size(I2)), 'Input images must have the same dimensions.');
+
+    % number of bins
+    num_bins = round(256 / bin_width);
+    
+    % Initializing histogram matrix
+    jnt_hist = zeros(num_bins, num_bins);
+    
+    % Adjust the pixel intensities to match the bin indices
+    I1_qntized = round(I1 / bin_width) + 1;
+    I2_qntized = round(I2 / bin_width) + 1;
+    
+    % Clip values to ensure they fit within the bin range
+    I1_qntized = min(max(I1_qntized, 1), num_bins);
+    I2_qntized = min(max(I2_qntized, 1), num_bins);
+    
+    % Compute the joint histogram
+    for i = 1:numel(I1)
+        jnt_hist(I1_qntized(i), I2_qntized(i)) = jnt_hist(I1_qntized(i), I2_qntized(i)) + 1;
+    end
+end
+
+
+
+
+
+
+
+
+%  Rotate J3 by the optimal angle to get J4
+J4_optimal = imrotate(J3, optimal_theta_je, 'bilinear', 'crop');
+J4_optimal(J4_optimal == 0) = 0; % Set unoccupied pixels to 0
+
+% Compute the joint histogram between J1 and J4_optimal
+bin_width = 10; 
+joint_histogram_optimal = compute_joint_histogram(J1, J4_optimal, bin_width);
+
+%  Normalize the joint histogram to obtain the joint PMF
+joint_pmf_optimal = joint_histogram_optimal / sum(joint_histogram_optimal(:)); 
+
+% Plot the joint histogram using imagesc
+figure;
+imagesc(joint_pmf_optimal); % Display the joint PMF as an image
+colorbar; % Add a colorbar to visualize the scale
+title(sprintf('Joint Histogram (JE Optimal Rotation: %.1f°)', optimal_theta_je));
+xlabel('Intensity of J4');
+ylabel('Intensity of J1');
